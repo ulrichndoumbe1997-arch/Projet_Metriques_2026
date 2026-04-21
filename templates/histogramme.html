@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Histogramme météo Paris</title>
+
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 24px;
+    }
+    #chart {
+      width: 100%;
+      min-height: 520px;
+    }
+    #status {
+      margin-top: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Prévisions météo de Paris — Histogramme</h1>
+  <div id="chart"></div>
+  <div id="status">Chargement...</div>
+
+  <script>
+    google.charts.load('current', { packages: ['corechart'] });
+    google.charts.setOnLoadCallback(init);
+
+    let cachedRows = [];
+    let resizeTimer = null;
+
+    async function init() {
+      try {
+        const rows = await fetchParisData();
+        cachedRows = rows;
+        drawChart(rows);
+        showStatus(`OK — ${rows.length} barres chargées depuis /paris`);
+      } catch (err) {
+        showStatus("Erreur : " + (err?.message || err));
+        console.error(err);
+      }
+
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (cachedRows.length > 0) {
+            drawChart(cachedRows);
+          }
+        }, 200);
+      });
+    }
+
+    async function fetchParisData() {
+      const res = await fetch('/paris', {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} sur /paris`);
+      }
+
+      const json = await res.json();
+
+      const rows = json.map(p => {
+        const label = formatLabel(p.datetime);
+        const temp = Number(p.temperature_c);
+        return [label, temp];
+      });
+
+      return rows;
+    }
+
+    function formatLabel(isoLike) {
+      const [datePart, timePart] = isoLike.split('T');
+      const [y, m, d] = datePart.split('-');
+      return `${d}/${m} ${timePart}`;
+    }
+
+    function drawChart(rows) {
+      const data = new google.visualization.DataTable();
+      data.addColumn('string', 'Date/Heure');
+      data.addColumn('number', 'Température (°C)');
+      data.addRows(rows);
+
+      const options = {
+        title: 'Températures de Paris (horaire)',
+        legend: { position: 'none' },
+        hAxis: {
+          title: 'Date/Heure',
+          slantedText: true,
+          slantedTextAngle: 60
+        },
+        vAxis: {
+          title: '°C'
+        },
+        height: 520
+      };
+
+      const chart = new google.visualization.ColumnChart(
+        document.getElementById('chart')
+      );
+      chart.draw(data, options);
+    }
+
+    function showStatus(msg) {
+      document.getElementById('status').textContent = msg;
+    }
+  </script>
+</body>
+</html>
